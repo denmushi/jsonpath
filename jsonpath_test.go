@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var json_data interface{}
@@ -96,7 +98,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
 	}
-	
+
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
@@ -133,12 +135,15 @@ func Test_jsonpath_JsonPathLookup_filter(t *testing.T) {
 	}
 
 	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price > 10)]")
-	t.Log(err, res)
+	assert.Nil(t, err)
+	assert.Equal(t, len(res.([]interface{})), 2)
 
 	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price > $.expensive)].price")
-	t.Log(err, res)
+	assert.Nil(t, err)
+	assert.Equal(t, len(res.([]interface{})), 2)
 	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price < $.expensive)].price")
-	t.Log(err, res)
+	assert.Nil(t, err)
+	assert.Equal(t, len(res.([]interface{})), 2)
 }
 
 func Test_jsonpath_authors_of_all_books(t *testing.T) {
@@ -1179,13 +1184,13 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %d", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+		t.Fatalf("idx: 0, should be 12.34. got: %d", ares[0])
 	}
 	if ares[1].(float64) != 13.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+		t.Fatalf("idx: 0, should be 12.34. got: %d", ares[1])
 	}
 }
 
@@ -1232,7 +1237,7 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %d", len(ares))
 	}
 
 	//FIXME: `$[:1].[0].test` got wrong result

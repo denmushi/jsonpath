@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/antlabs/deepcopy"
 )
 
 var ErrGetFromNullObj = errors.New("get attribute from null object")
@@ -69,6 +71,10 @@ func (c *Compiled) String() string {
 
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 	var err error
+	var root interface{}
+	if err := deepcopy.Copy(&root, &obj).Do(); err != nil {
+		return nil, err
+	}
 	for _, s := range c.steps {
 		// "key", "idx"
 		switch s.op {
@@ -128,7 +134,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
-			obj, err = get_filtered(obj, obj, s.args.(string))
+			obj, err = get_filtered(obj, root, s.args.(string))
 			if err != nil {
 				return nil, err
 			}
