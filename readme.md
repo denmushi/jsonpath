@@ -21,7 +21,7 @@ example code:
 
 ```go
 import (
-    "github.com/oliveagle/jsonpath"
+    "github.com/denmushi/jsonpath"
     "encoding/json"
 )
 
