@@ -14,25 +14,22 @@ Get Started
 ------------
 
 ```bash
-go get github.com/oliveagle/jsonpath
+go get github.com/denmushi/jsonpath
 ```
 
 example code:
 
 ```go
 import (
-    "github.com/oliveagle/jsonpath"
+    "github.com/denmushi/jsonpath"
     "encoding/json"
 )
 
 var json_data interface{}
 json.Unmarshal([]byte(data), &json_data)
 
-res, err := jsonpath.JsonPathLookup(json_data, "$.expensive")
+res, err := jsonpath.Lookup(json_data, "$.expensive")
 
-//or reuse lookup pattern
-pat, _ := jsonpath.Compile(`$.store.book[?(@.price < $.expensive)].price`)
-res, err := pat.Lookup(json_data)
 ```
 
 Operators
