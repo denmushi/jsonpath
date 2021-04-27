@@ -5,11 +5,10 @@ JsonPath
 
 A golang implementation of JsonPath syntax.
 follow the majority rules in http://goessner.net/articles/JsonPath/
-but also with some minor differences.
 
-this library is till bleeding edge, so use it at your own risk. :D
+This repository is based on the modification of the [ repository](https://github.com/oliveagle/jsonpath).
 
-**Golang Version Required**: 1.5+
+Thanks for [oliveagle](https://github.com/oliveagle).
 
 Get Started
 ------------
