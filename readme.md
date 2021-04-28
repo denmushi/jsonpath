@@ -6,7 +6,7 @@ JsonPath
 A golang implementation of JsonPath syntax.
 follow the majority rules in http://goessner.net/articles/JsonPath/
 
-This repository is based on the modification of the [ repository](https://github.com/oliveagle/jsonpath).
+This repository is based on the [ repository](https://github.com/oliveagle/jsonpath).
 
 Thanks for [oliveagle](https://github.com/oliveagle).
 
