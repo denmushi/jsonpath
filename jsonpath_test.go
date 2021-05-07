@@ -133,7 +133,11 @@ func init() {
               "id": "ou_yyy",
               "name": "hhhh"
             }
-          ]
+          ],
+		  "5": {
+			"id": "ou_yyy",
+ 			"@type": "person1"
+		  }
         }
       }
     ]
@@ -150,6 +154,13 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 		res, err := Lookup(jsonDataV3, "$.data.records[*].fields.*[?(@.@type == person)].id")
 		want := map[string]interface{}{
 			"$.data.records[0].fields.4[0].id": "ou_xxx",
+		}
+		assert.Nil(t, err)
+		assert.Equal(t, res, want)
+
+		res, err = Lookup(jsonDataV3, "$.data.records[*].fields[?(@.@type == person1)].id")
+		want = map[string]interface{}{
+			"$.data.records[0].fields.5.id": "ou_yyy",
 		}
 		assert.Nil(t, err)
 		assert.Equal(t, res, want)
