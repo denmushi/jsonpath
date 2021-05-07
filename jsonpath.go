@@ -13,12 +13,13 @@ import (
 )
 
 const (
-	keyType    = "key"
-	idxType    = "idx"
-	rangeType  = "range"
-	filterType = "filter"
-	scanType   = "scan"
-	rootType   = "root"
+	keyType        = "key"
+	idxType        = "idx"
+	rangeType      = "range"
+	filterType     = "filter"
+	scanType       = "scan"
+	scanFilterType = "scanFilter"
+	rootType       = "root"
 )
 
 var (
@@ -107,6 +108,11 @@ func (c *Compiled) Lookup(obj interface{}) (map[string]interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
+		case scanFilterType:
+			err = c.scanFilter(s)
+			if err != nil {
+				return nil, err
+			}
 		case scanType:
 			err = c.scans()
 			if err != nil {
@@ -169,6 +175,32 @@ func (c *Compiled) scan(obj interface{}) (map[objType]interface{}, error) {
 		return nil, errNotSupported
 	}
 	return res, nil
+}
+
+func (c *Compiled) scanFilter(s step) error {
+	res := make(map[string]interface{})
+	if err := c.scans(); err != nil {
+		return err
+	}
+	for k, v := range c.result {
+		obj, err := c.getFiltered(v, s.args.(string))
+		if err != nil {
+			return err
+		}
+		for oKey, oVal := range obj {
+			switch oKey.objType {
+			case reflect.Slice:
+				res[k+"["+fmt.Sprintf("%d", oKey.index)+"]"] = oVal
+			case reflect.Map:
+				res[k+"."+oKey.key] = oVal
+			default:
+				return errNotSupported
+			}
+
+		}
+	}
+	c.result = res
+	return nil
 }
 
 func (c *Compiled) filter(s step) error {
@@ -476,7 +508,7 @@ func (c *Compiled) getFiltered(obj interface{}, filter string) (map[objType]inte
 			}
 		}
 	default:
-		return nil, fmt.Errorf("don't support filterType on this type: %v", reflect.TypeOf(obj).Kind())
+		return nil, nil
 	}
 
 	return res, nil
@@ -574,12 +606,12 @@ func parseToken(token string) (op string, key string, args interface{}, err erro
 		return scanType, "*", nil, nil
 	}
 
-	bracket_idx := strings.Index(token, "[")
-	if bracket_idx < 0 {
+	bracketIdx := strings.Index(token, "[")
+	if bracketIdx < 0 {
 		return keyType, token, nil, nil
 	} else {
-		key = token[:bracket_idx]
-		tail := token[bracket_idx:]
+		key = token[:bracketIdx]
+		tail := token[bracketIdx:]
 		if len(tail) < 3 {
 			err = fmt.Errorf("len(tail) should >=3, %v", tail)
 			return
@@ -592,6 +624,9 @@ func parseToken(token string) (op string, key string, args interface{}, err erro
 			op = filterType
 			if strings.HasPrefix(tail, "?(") && strings.HasSuffix(tail, ")") {
 				args = strings.Trim(tail[2:len(tail)-1], " ")
+			}
+			if key == "*" {
+				op = scanFilterType
 			}
 			return
 		} else if strings.Contains(tail, ":") {
