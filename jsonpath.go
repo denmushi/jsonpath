@@ -366,6 +366,9 @@ func (c *Compiled) getRange(obj, frm, to interface{}) (map[objType]interface{}, 
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Slice:
 		length := reflect.ValueOf(obj).Len()
+		if length == 0 {
+			return nil, nil
+		}
 		_frm := 0
 		_to := length
 		if frm == nil {

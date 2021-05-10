@@ -15,6 +15,7 @@ var (
 	jsonData   interface{}
 	jsonDataV2 interface{}
 	jsonDataV3 interface{}
+	jsonDataV4 interface{}
 )
 
 func init() {
@@ -146,9 +147,22 @@ func init() {
 	decoder = json.NewDecoder(strings.NewReader(dataV3))
 	decoder.UseNumber()
 	_ = decoder.Decode(&jsonDataV3)
+
+	dataV4 := `{
+  "data": []
+}`
+	decoder = json.NewDecoder(strings.NewReader(dataV4))
+	decoder.UseNumber()
+	_ = decoder.Decode(&jsonDataV4)
 }
 
 func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
+
+	t.Run("empty list", func(t *testing.T) {
+		res, err := Lookup(jsonDataV4, "$.data[*]")
+		assert.Nil(t, err)
+		assert.Equal(t, res, map[string]interface{}{})
+	})
 
 	t.Run("list express", func(t *testing.T) {
 		res, err := Lookup(jsonDataV3, "$.data.records[*].fields.*[?(@.@type == person)].id")
