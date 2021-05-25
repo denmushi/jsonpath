@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	jsonData   interface{}
-	jsonDataV2 interface{}
-	jsonDataV3 interface{}
-	jsonDataV4 interface{}
+	jsonData    interface{}
+	jsonDataV2  interface{}
+	jsonDataV3  interface{}
+	jsonDataV4  interface{}
+	jsonDataNil interface{}
 )
 
 func init() {
@@ -154,9 +155,35 @@ func init() {
 	decoder = json.NewDecoder(strings.NewReader(dataV4))
 	decoder.UseNumber()
 	_ = decoder.Decode(&jsonDataV4)
+
+	dataNil := `{
+    "data": null,
+	"arr": null
+}`
+	decoder = json.NewDecoder(strings.NewReader(dataNil))
+	decoder.UseNumber()
+	_ = decoder.Decode(&jsonDataNil)
 }
 
 func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
+
+	t.Run("null", func(t *testing.T) {
+		res, err := Lookup(jsonDataNil, `$.data.records`)
+		assert.Nil(t, err)
+		assert.Equal(t, res, map[string]interface{}{})
+		res, err = Lookup(jsonDataNil, "$.arr[*].a")
+		assert.Nil(t, err)
+		assert.Equal(t, res, map[string]interface{}{})
+		res, err = Lookup(jsonDataNil, "$.arr[1].a")
+		assert.Nil(t, err)
+		assert.Equal(t, res, map[string]interface{}{})
+		res, err = Lookup(jsonDataNil, "$.*[?(@.test == b)].a")
+		assert.Nil(t, err)
+		assert.Equal(t, res, map[string]interface{}{})
+		res, err = Lookup(jsonDataNil, "$.*.*")
+		assert.Nil(t, err)
+		assert.Equal(t, res, map[string]interface{}{})
+	})
 
 	t.Run("empty list", func(t *testing.T) {
 		res, err := Lookup(jsonDataV4, "$.data[*]")
@@ -374,7 +401,7 @@ var tokenCases = []map[string]interface{}{
 	},
 	{
 		"query":  "$..*",
-		"tokens": []string{"$", "*"},
+		"tokens": []string{"$", "*", "*"},
 	},
 	{
 		"query":  "$....author",

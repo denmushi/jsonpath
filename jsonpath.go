@@ -150,6 +150,9 @@ func (c *Compiled) scans() error {
 }
 
 func (c *Compiled) scan(obj interface{}) (map[objType]interface{}, error) {
+	if obj == nil {
+		return nil, nil
+	}
 	res := make(map[objType]interface{})
 	value := reflect.ValueOf(obj)
 	switch value.Kind() {
@@ -426,6 +429,9 @@ func (c *Compiled) getRange(obj, frm, to interface{}) (map[objType]interface{}, 
 }
 
 func (c *Compiled) getFiltered(obj interface{}, filter string) (map[objType]interface{}, error) {
+	if obj == nil {
+		return nil, nil
+	}
 	lp, op, rp, err := parseFilter(filter)
 	if err != nil {
 		return nil, err
@@ -578,20 +584,24 @@ func tokenize(query string) ([]string, error) {
 		}
 	}
 	if len(t) > 0 {
+		//if t[0] == '.' {
+		//	t = t[1:]
+		//	if t != "*" {
+		//		tokens = append(tokens, t[:])
+		//	} else if tokens[len(tokens)-1] != "*" {
+		//		tokens = append(tokens, t[:])
+		//	}
+		//} else {
+		//	if t != "*" {
+		//		tokens = append(tokens, t[:])
+		//	} else if tokens[len(tokens)-1] != "*" {
+		//		tokens = append(tokens, t[:])
+		//	}
+		//}
 		if t[0] == '.' {
 			t = t[1:]
-			if t != "*" {
-				tokens = append(tokens, t[:])
-			} else if tokens[len(tokens)-1] != "*" {
-				tokens = append(tokens, t[:])
-			}
-		} else {
-			if t != "*" {
-				tokens = append(tokens, t[:])
-			} else if tokens[len(tokens)-1] != "*" {
-				tokens = append(tokens, t[:])
-			}
 		}
+		tokens = append(tokens, t[:])
 	}
 	// fmt.Println("finished tokens: ", tokens)
 	// fmt.Println("================================================= done ")
