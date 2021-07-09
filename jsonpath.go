@@ -25,6 +25,8 @@ const (
 var (
 	errGetFromNullObj = errors.New("get attribute from null object")
 	errNotSupported   = errors.New("not supported")
+	reg1              = regexp.MustCompile(`\[([0-9]+|\*)]`)
+	reg2              = regexp.MustCompile(`[0-9]+]`)
 )
 
 func Lookup(obj interface{}, jsonPath string) (map[string]interface{}, error) {
@@ -33,6 +35,266 @@ func Lookup(obj interface{}, jsonPath string) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return c.Lookup(obj)
+}
+
+// 给定一个JsonPath语法的固定路径，进行body更新.
+func SetToBody(keyFullPath string, body map[string]interface{}, value interface{}) error {
+	rawParts := strings.Split(keyFullPath, ".")
+	if len(rawParts) <= 1 || rawParts[0] != "$" {
+		return errors.New("invalid Key full path")
+	}
+	// parts数组中把"user[0]"拆成{"user","[0]"}存放,方便后续解析,支持连续多级,例如user[0][1][2]
+	parts := make([]string, 0, len(rawParts))
+	for _, rawPart := range rawParts {
+		strs := strings.Split(rawPart, "[")
+		for _, s := range strs {
+			ok := reg2.MatchString(s)
+			if ok {
+				s = "[" + s
+			}
+			parts = append(parts, s)
+		}
+	}
+	if err := recursiveSet(parts[1:], body, value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// 给定一个JsonPath语法的通配路径，进行body删除
+func DeleteByKey(key string, body map[string]interface{}) error {
+	keyMap, err := Lookup(body, key)
+	if err != nil {
+		return err
+	}
+	toDelete := make([]string, 0, len(keyMap))
+	for k, _ := range keyMap {
+		toDelete = append(toDelete, k)
+	}
+	return DeleteBody(toDelete, body)
+}
+
+// 给定一组JsonPath语法的固定路径，进行body删除
+func DeleteBody(keyFullPaths []string, body map[string]interface{}) error {
+	for _, keyFullPath := range keyFullPaths {
+		if err := markBody(keyFullPath, body); err != nil {
+			return err
+		}
+	}
+	recursiveDelete(&body)
+	return nil
+}
+
+// 给定一个json_path重命名的配置，修改body的key
+func Rename(renames RenamesConfig, body map[string]interface{}) error {
+	configs, maxLen := renames.ParseConfig()
+	for i := 0; i < maxLen; i++ {
+		if err := renameIndex(configs, i, body); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func renameIndex(configs []RenameConfigParse, k int, body map[string]interface{}) error {
+	renameMap := make(map[string]string)
+	for _, each := range configs {
+		err := renameEachWithIndex(each, k, body, renameMap)
+		if err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
+func renameEachWithIndex(config RenameConfigParse, k int, body map[string]interface{}, renameMap map[string]string) error {
+	from, to, ok := config.BuildPath(k)
+	if !ok {
+		return nil
+	}
+	if _, ok := renameMap[from]; ok {
+		if err := config.RenameFrom(k); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	doFrom, doTo := trim(from, to)
+	if doFrom == doTo {
+		return nil
+	}
+	values, err := Lookup(body, doFrom)
+	if err != nil {
+		return err
+	}
+
+	if err := addBody(doTo, body, values); err != nil {
+		return err
+	}
+	if err := DeleteByKey(doFrom, body); err != nil {
+		return err
+	}
+	// 修改config
+	if err := config.RenameFrom(k); err != nil {
+		return err
+	}
+	// 保存当前k层的rename记录
+	renameMap[from] = to
+	return nil
+}
+
+func trim(from string, to string) (string, string) {
+	fs := strings.Split(from, ".")
+	ts := strings.Split(to, ".")
+	lastFrom := fs[len(fs)-1]
+	lastTo := ts[len(ts)-1]
+	fs[len(fs)-1] = strings.Split(lastFrom, "[")[0]
+	ts[len(ts)-1] = strings.Split(lastTo, "[")[0]
+	return strings.Join(fs, "."), strings.Join(ts, ".")
+}
+
+func addBody(path string, body map[string]interface{}, values map[string]interface{}) error {
+	last := getPathLast(path)
+	setMap := make(map[string]interface{})
+	for k, v := range values {
+		newK := trimPathLast(k)
+		setMap[newK+"."+last] = v
+	}
+	for k, v := range setMap {
+		if err := SetToBody(k, body, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func trimPathLast(path string) string {
+	parts := strings.Split(path, ".")
+	return strings.Join(parts[0:len(parts)-1], ".")
+}
+
+func getPathLast(path string) string {
+	parts := strings.Split(path, ".")
+	return parts[len(parts)-1]
+}
+
+func markBody(keyFullPath string, body map[string]interface{}) error {
+	rawParts := strings.Split(keyFullPath, ".")
+	if len(rawParts) <= 1 || rawParts[0] != "$" {
+		return errors.New("invalid Key full path")
+	}
+	// parts数组中把"user[0]"拆成{"user","[0]"}存放,方便后续解析,支持连续多级,例如user[0][1][2]
+	parts := make([]string, 0, len(rawParts))
+	for _, rawPart := range rawParts {
+		strs := strings.Split(rawPart, "[")
+		for _, s := range strs {
+			ok := reg2.MatchString(s)
+			if ok {
+				s = "[" + s
+			}
+			parts = append(parts, s)
+		}
+	}
+	if err := recursiveMark(parts[1:], body); err != nil {
+		return err
+	}
+	return nil
+}
+
+func recursiveMark(parts []string, body interface{}) error {
+	// 进来的part只有两种情况，一种是key值，一种是数组值[0]
+	params := reg1.FindStringSubmatch(parts[0])
+	switch len(params) {
+	case 2: //  数组
+		bodyArr, _ := body.([]interface{})
+		index, _ := strconv.Atoi(params[1])
+		if !(0 <= index && index < len(bodyArr)) {
+			return nil
+		}
+		if len(parts) == 1 {
+			bodyArr[index] = nil
+
+			return nil
+		}
+		return recursiveMark(parts[1:], bodyArr[index])
+	default: // Key
+		bodyMap, ok := body.(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		if len(parts) == 1 {
+			bodyMap[parts[0]] = nil
+
+			return nil
+		}
+		return recursiveMark(parts[1:], bodyMap[parts[0]])
+	}
+}
+
+func recursiveDelete(body interface{}) {
+	switch node := body.(type) {
+	case nil:
+		return
+	case *map[string]interface{}:
+		for k, v := range *node {
+			if v == nil {
+				delete(*node, k)
+			} else {
+				recursiveDelete(&v)
+				(*node)[k] = v
+			}
+		}
+	case *interface{}:
+		switch n1 := (*node).(type) {
+		case map[string]interface{}:
+			recursiveDelete(&n1)
+		case []interface{}:
+			arr := make([]interface{}, 0, len(n1))
+			for _, each := range n1 {
+				if each != nil {
+					arr = append(arr, each)
+				}
+			}
+			for _, each := range arr {
+				recursiveDelete(&each)
+			}
+			*node = arr
+		default:
+		}
+	default:
+		return
+	}
+}
+
+func recursiveSet(parts []string, body interface{}, value interface{}) error {
+	// 进来的part只有两种情况，一种是key值，一种是数组值[0]
+	params := reg1.FindStringSubmatch(parts[0])
+	switch len(params) {
+	case 2: //  数组
+		bodyArr, _ := body.([]interface{})
+		index, _ := strconv.Atoi(params[1])
+		if !(0 <= index && index < len(bodyArr)) {
+			return errors.New("JsonPath error")
+		}
+		if len(parts) == 1 {
+			bodyArr[index] = value
+
+			return nil
+		}
+		return recursiveSet(parts[1:], bodyArr[index], value)
+	default: // Key
+		bodyMap, ok := body.(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		if len(parts) == 1 {
+			bodyMap[parts[0]] = value
+
+			return nil
+		}
+		return recursiveSet(parts[1:], bodyMap[parts[0]], value)
+	}
 }
 
 type step struct {
