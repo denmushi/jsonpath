@@ -3,57 +3,30 @@ JsonPath
 
 ![Build Status](https://travis-ci.org/oliveagle/jsonpath.svg?branch=master)
 
-A golang implementation of JsonPath syntax.
-follow the majority rules in http://goessner.net/articles/JsonPath/
+Golang实现的JsonPath解析库
+- 可以对Json的Value进行读、写
+- 可以修改和删除Json的Key
 
-This repository is based on the [ repository](https://github.com/oliveagle/jsonpath).
+本库基于这个 [库](https://github.com/oliveagle/jsonpath) 进行修改.
 
-Thanks for [oliveagle](https://github.com/oliveagle).
+感谢 [oliveagle](https://github.com/oliveagle).
 
-Get Started
+快速开始
 ------------
 
 ```bash
 go get github.com/denmushi/jsonpath
 ```
 
-example code:
+**示例代码**
 
+示例Json
 ```go
 import (
-    "github.com/denmushi/jsonpath"
-    "encoding/json"
+	"encoding/json"
 )
 
-var json_data interface{}
-json.Unmarshal([]byte(data), &json_data)
-
-res, err := jsonpath.Lookup(json_data, "$.expensive")
-
-```
-
-Operators
---------
-referenced from github.com/jayway/JsonPath
-
-| Operator | Supported | Description |
-| ---- | :---: | ---------- |
-| $ 					  | Y | The root element to query. This starts all path expressions. |
-| @ 				      | Y | The current node being processed by a filter predicate. |
-| * 					  | X | Wildcard. Available anywhere a name or numeric are required. |
-| .. 					  | X | Deep scan. Available anywhere a name is required. |
-| .<name> 				  | Y | Dot-notated child |
-| ['<name>' (, '<name>')] | X | Bracket-notated child or children |
-| [<number> (, <number>)] | Y | Array index or indexes |
-| [start:end] 			  | Y | Array slice operator |
-| [?(<expression>)] 	  | Y | Filter expression. Expression must evaluate to a boolean value. |
-
-Examples
---------
-given these example data.
-
-```javascript
-{
+var data = {
     "store": {
         "book": [
             {
@@ -90,21 +63,60 @@ given these example data.
     },
     "expensive": 10
 }
+
+var json_data interface{}
+_ = json.Unmarshal([]byte(data), &json_data)
 ```
-example json path syntax.
-----
 
-| jsonpath | result|
-| :--------- | :-------|
-| $.expensive 			                           | 10|
-| $.store.book[0].price                            | 8.95|
-| $.store.book[-1].isbn                            | "0-395-19395-8"|
-| $.store.book[0,1].price                          | [8.95, 12.99]   |
-| $.store.book[0:2].price                          | [8.95, 12.99, 8.99]|
-| $.store.book[?(@.isbn)].price                    |  [8.99, 22.99] |
-| $.store.book[?(@.price > 10)].title              | ["Sword of Honour", "The Lord of the Rings"]|
-| $.store.book[?(@.price < $.expensive)].price     | [8.95, 8.99] |
-| $.store.book[:].price                            | [8.9.5, 12.99, 8.9.9, 22.99] |
-| $.store.book[?(@.author =~ /(?i).*REES/)].author | "Nigel Rees" |
+读取Json值
+```go
+import (
+    "github.com/denmushi/jsonpath"
+)
 
-> Note: golang support regular expression flags in form of `(?imsU)pattern`
+res, _ := jsonpath.Lookup(json_data, "$.store.book[*].price")
+```
+`res`是一个`map[string]interface{}`，`key`是解析得到的不含通配符的固定路径，可用于值修改，`value`是该路径对应的值
+
+修改Json值
+```go
+import (
+    "github.com/denmushi/jsonpath"
+)
+
+_ = jsonpath.SetToBody(json_data, "$.store.book[0].category", "haha")
+```
+
+删除Json的key和value
+```go
+import (
+    "github.com/denmushi/jsonpath"
+)
+
+// 根据一个通配路径进行删除
+_ = jsonpath.DeleteByKey(json_data, "$.store.book[*].price")
+
+// 根据一个固定路径数组进行删除，采用先标记再删除的方式，不用担心删除过程中json结构会发生变化
+_ = jsonpath.DeleteBody(json_data, []string{"$.store.book[0].price","$.store.bicycle"})
+```
+
+修改Json的key
+```go
+import (
+    "github.com/denmushi/jsonpath"
+)
+
+config := jsonpath.RenamesConfig{
+    Config: []jsonpath.RenameConfig{
+	    {
+	    	From: "$.store.book[*].title",
+	        To:   "$.store.new_book[*].new_title",
+	    },
+	    {
+	    	From: "$.expensive",
+	    	To:   "$.new_expensive",
+	    },
+	}
+}
+_ = jsonpath.Rename(json_data, config)
+```

@@ -17,10 +17,8 @@ var (
 	jsonDataV3  interface{}
 	jsonDataV4  interface{}
 	jsonDataNil interface{}
-)
 
-func init() {
-	data := `
+	data = `
 {
     "store": {
         "book": [
@@ -59,10 +57,7 @@ func init() {
     "expensive": 10
 }
 `
-	decoder := json.NewDecoder(strings.NewReader(data))
-	decoder.UseNumber()
-	_ = decoder.Decode(&jsonData)
-	dataV2 := `{
+	dataV2 = `{
     "fields": {
         "人力评估": {
             "name": "manpower",
@@ -113,10 +108,7 @@ func init() {
         }
     }
 }`
-	decoder = json.NewDecoder(strings.NewReader(dataV2))
-	decoder.UseNumber()
-	_ = decoder.Decode(&jsonDataV2)
-	dataV3 := `{
+	dataV3 = `{
   "data": {
     "records": [
       {
@@ -145,21 +137,30 @@ func init() {
     ]
   }
 }`
+	dataV4 = `{
+  "data": []
+}`
+	dataNil = `{
+    "data": null,
+	"arr": null
+}`
+)
+
+func init() {
+	decoder := json.NewDecoder(strings.NewReader(data))
+	decoder.UseNumber()
+	_ = decoder.Decode(&jsonData)
+	decoder = json.NewDecoder(strings.NewReader(dataV2))
+	decoder.UseNumber()
+	_ = decoder.Decode(&jsonDataV2)
 	decoder = json.NewDecoder(strings.NewReader(dataV3))
 	decoder.UseNumber()
 	_ = decoder.Decode(&jsonDataV3)
 
-	dataV4 := `{
-  "data": []
-}`
 	decoder = json.NewDecoder(strings.NewReader(dataV4))
 	decoder.UseNumber()
 	_ = decoder.Decode(&jsonDataV4)
 
-	dataNil := `{
-    "data": null,
-	"arr": null
-}`
 	decoder = json.NewDecoder(strings.NewReader(dataNil))
 	decoder.UseNumber()
 	_ = decoder.Decode(&jsonDataNil)
@@ -593,7 +594,7 @@ func TestJsonpathGetKey(t *testing.T) {
 }
 
 func TestJsonpathGetIdx(t *testing.T) {
-	c := &Compiled{}
+	c := &compiled{}
 	obj := []interface{}{1, 2, 3, 4}
 	res, err := c.getIdx(obj, 0)
 	assert.Nil(t, err)
@@ -750,7 +751,7 @@ func TestJsonpathGetRange(t *testing.T) {
 			},
 		},
 	}
-	c := &Compiled{}
+	c := &compiled{}
 	for _, oneCase := range cases {
 		res, err := c.getRange(oneCase.obj, oneCase.frm, oneCase.to)
 		assert.Nil(t, err)
@@ -1222,5 +1223,183 @@ func TestJsonpathRootnodeIsNestedArrayRange(t *testing.T) {
 	assert.Equal(t, res, map[string]interface{}{
 		"$[0][0].test": 1.1,
 		"$[1][0].test": 3.1,
+	})
+}
+
+func TestJsonpathSetBody(t *testing.T) {
+	var setJson interface{}
+	decoder := json.NewDecoder(strings.NewReader(data))
+	decoder.UseNumber()
+	_ = decoder.Decode(&setJson)
+	tcases := []struct {
+		path  string
+		value interface{}
+	}{
+		{
+			path:  "$.store.book[0].category",
+			value: "haha",
+		},
+		{
+			path:  "$.store.book[3].price",
+			value: 10.10,
+		},
+		{
+			path:  "$.store.not_exist",
+			value: "nono",
+		},
+		{
+			path:  "$.store.bicycle",
+			value: nil,
+		},
+	}
+	t.Run("set", func(t *testing.T) {
+		for _, tcase := range tcases {
+			err := SetToBody(setJson, tcase.path, tcase.value)
+			assert.Nil(t, err)
+			assert.Equal(t, getValue(setJson, tcase.path), tcase.value)
+		}
+	})
+}
+
+func getValue(obj interface{}, path string) interface{} {
+	res, err := Lookup(obj, path)
+	if err != nil {
+		panic(err)
+	}
+	return res[path]
+}
+
+func TestDeleteBody(t *testing.T) {
+
+	t.Run("deleteByKey", func(t *testing.T) {
+		tcases := []string{
+			"$.store.book[*].price",
+		}
+		var deleteJson interface{}
+		decoder := json.NewDecoder(strings.NewReader(data))
+		decoder.UseNumber()
+		_ = decoder.Decode(&deleteJson)
+		for _, tcase := range tcases {
+			err := DeleteByKey(deleteJson, tcase)
+			assert.Nil(t, err)
+			res, err := Lookup(deleteJson, tcase)
+			assert.Nil(t, err)
+			assert.Equal(t, map[string]interface{}{}, res)
+		}
+
+	})
+	t.Run("deleteByFullPath", func(t *testing.T) {
+		tcases := []string{
+			"$.store.book[0]",
+			"$.store.book[2].price",
+			"$.store.bicycle",
+		}
+		deleteJsonStr := `
+{
+    "store": {
+        "book": [
+            {
+                "category": "fiction",
+                "author": "Evelyn Waugh",
+                "title": "Sword of Honour",
+                "price": 12.99
+            },
+            {
+                "category": "fiction",
+                "author": "Herman Melville",
+                "title": "Moby Dick",
+                "isbn": "0-553-21311-3"
+            },
+            {
+                "category": "fiction",
+                "author": "J. R. R. Tolkien",
+                "title": "The Lord of the Rings",
+                "isbn": "0-395-19395-8",
+                "price": 22.99
+            }
+        ]
+    },
+    "expensive": 10
+}
+`
+		var deleteJson interface{}
+		decoder := json.NewDecoder(strings.NewReader(data))
+		decoder.UseNumber()
+		_ = decoder.Decode(&deleteJson)
+		var afterDeleteJson interface{}
+		decoder = json.NewDecoder(strings.NewReader(deleteJsonStr))
+		decoder.UseNumber()
+		_ = decoder.Decode(&afterDeleteJson)
+
+		err := DeleteBody(deleteJson, tcases)
+		assert.Nil(t, err)
+		assert.Equal(t, afterDeleteJson, deleteJson)
+	})
+}
+
+func TestRename(t *testing.T) {
+	config := RenamesConfig{
+		Config: []RenameConfig{
+			{
+				From: "$.store.book[*].title",
+				To:   "$.store.new_book[*].new_title",
+			},
+			{
+				From: "$.expensive",
+				To:   "$.new_expensive",
+			},
+		},
+	}
+	afterRenameJsonStr := `
+{
+    "store": {
+        "new_book": [
+            {
+                "category": "reference",
+                "author": "Nigel Rees",
+                "new_title": "Sayings of the Century",
+                "price": 8.95
+            },
+            {
+                "category": "fiction",
+                "author": "Evelyn Waugh",
+                "new_title": "Sword of Honour",
+                "price": 12.99
+            },
+            {
+                "category": "fiction",
+                "author": "Herman Melville",
+                "new_title": "Moby Dick",
+                "isbn": "0-553-21311-3",
+                "price": 8.99
+            },
+            {
+                "category": "fiction",
+                "author": "J. R. R. Tolkien",
+                "new_title": "The Lord of the Rings",
+                "isbn": "0-395-19395-8",
+                "price": 22.99
+            }
+        ],
+        "bicycle": {
+            "color": "red",
+            "price": 19.95
+        }
+    },
+    "new_expensive": 10
+}
+`
+	var renameJson interface{}
+	decoder := json.NewDecoder(strings.NewReader(data))
+	decoder.UseNumber()
+	_ = decoder.Decode(&renameJson)
+	var afterRenameJson interface{}
+	decoder = json.NewDecoder(strings.NewReader(afterRenameJsonStr))
+	decoder.UseNumber()
+	_ = decoder.Decode(&afterRenameJson)
+	t.Run("rename", func(t *testing.T) {
+		err := Rename(renameJson, config)
+		assert.Nil(t, err)
+		assert.Equal(t, afterRenameJson, renameJson)
 	})
 }

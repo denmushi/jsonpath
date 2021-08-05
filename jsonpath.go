@@ -30,7 +30,7 @@ var (
 )
 
 func Lookup(obj interface{}, jsonPath string) (map[string]interface{}, error) {
-	c, err := Compile(jsonPath)
+	c, err := compile(jsonPath)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func Lookup(obj interface{}, jsonPath string) (map[string]interface{}, error) {
 }
 
 // 给定一个JsonPath语法的固定路径，进行body更新.
-func SetToBody(keyFullPath string, body map[string]interface{}, value interface{}) error {
+func SetToBody(body interface{}, keyFullPath string, value interface{}) error {
 	rawParts := strings.Split(keyFullPath, ".")
 	if len(rawParts) <= 1 || rawParts[0] != "$" {
 		return errors.New("invalid Key full path")
@@ -62,7 +62,7 @@ func SetToBody(keyFullPath string, body map[string]interface{}, value interface{
 }
 
 // 给定一个JsonPath语法的通配路径，进行body删除
-func DeleteByKey(key string, body map[string]interface{}) error {
+func DeleteByKey(body interface{}, key string) error {
 	keyMap, err := Lookup(body, key)
 	if err != nil {
 		return err
@@ -71,11 +71,11 @@ func DeleteByKey(key string, body map[string]interface{}) error {
 	for k, _ := range keyMap {
 		toDelete = append(toDelete, k)
 	}
-	return DeleteBody(toDelete, body)
+	return DeleteBody(body, toDelete)
 }
 
 // 给定一组JsonPath语法的固定路径，进行body删除
-func DeleteBody(keyFullPaths []string, body map[string]interface{}) error {
+func DeleteBody(body interface{}, keyFullPaths []string) error {
 	for _, keyFullPath := range keyFullPaths {
 		if err := markBody(keyFullPath, body); err != nil {
 			return err
@@ -86,8 +86,8 @@ func DeleteBody(keyFullPaths []string, body map[string]interface{}) error {
 }
 
 // 给定一个json_path重命名的配置，修改body的key
-func Rename(renames RenamesConfig, body map[string]interface{}) error {
-	configs, maxLen := renames.ParseConfig()
+func Rename(body interface{}, renames RenamesConfig) error {
+	configs, maxLen := renames.parseConfig()
 	for i := 0; i < maxLen; i++ {
 		if err := renameIndex(configs, i, body); err != nil {
 			return err
@@ -96,25 +96,24 @@ func Rename(renames RenamesConfig, body map[string]interface{}) error {
 	return nil
 }
 
-func renameIndex(configs []RenameConfigParse, k int, body map[string]interface{}) error {
+func renameIndex(configs []renameConfigParse, k int, body interface{}) error {
 	renameMap := make(map[string]string)
 	for _, each := range configs {
-		err := renameEachWithIndex(each, k, body, renameMap)
+		err := renameEachWithIndex(body, each, k, renameMap)
 		if err != nil {
 			return err
 		}
-
 	}
 	return nil
 }
 
-func renameEachWithIndex(config RenameConfigParse, k int, body map[string]interface{}, renameMap map[string]string) error {
-	from, to, ok := config.BuildPath(k)
+func renameEachWithIndex(body interface{}, config renameConfigParse, k int, renameMap map[string]string) error {
+	from, to, ok := config.buildPath(k)
 	if !ok {
 		return nil
 	}
 	if _, ok := renameMap[from]; ok {
-		if err := config.RenameFrom(k); err != nil {
+		if err := config.renameFrom(k); err != nil {
 			return err
 		}
 		return nil
@@ -132,11 +131,11 @@ func renameEachWithIndex(config RenameConfigParse, k int, body map[string]interf
 	if err := addBody(doTo, body, values); err != nil {
 		return err
 	}
-	if err := DeleteByKey(doFrom, body); err != nil {
+	if err := DeleteByKey(body, doFrom); err != nil {
 		return err
 	}
 	// 修改config
-	if err := config.RenameFrom(k); err != nil {
+	if err := config.renameFrom(k); err != nil {
 		return err
 	}
 	// 保存当前k层的rename记录
@@ -154,7 +153,7 @@ func trim(from string, to string) (string, string) {
 	return strings.Join(fs, "."), strings.Join(ts, ".")
 }
 
-func addBody(path string, body map[string]interface{}, values map[string]interface{}) error {
+func addBody(path string, body interface{}, values map[string]interface{}) error {
 	last := getPathLast(path)
 	setMap := make(map[string]interface{})
 	for k, v := range values {
@@ -162,7 +161,7 @@ func addBody(path string, body map[string]interface{}, values map[string]interfa
 		setMap[newK+"."+last] = v
 	}
 	for k, v := range setMap {
-		if err := SetToBody(k, body, v); err != nil {
+		if err := SetToBody(body, k, v); err != nil {
 			return err
 		}
 	}
@@ -179,7 +178,7 @@ func getPathLast(path string) string {
 	return parts[len(parts)-1]
 }
 
-func markBody(keyFullPath string, body map[string]interface{}) error {
+func markBody(keyFullPath string, body interface{}) error {
 	rawParts := strings.Split(keyFullPath, ".")
 	if len(rawParts) <= 1 || rawParts[0] != "$" {
 		return errors.New("invalid Key full path")
@@ -303,7 +302,7 @@ type step struct {
 	args interface{}
 }
 
-func Compile(jsonPath string) (*Compiled, error) {
+func compile(jsonPath string) (*compiled, error) {
 	tokens, err := tokenize(jsonPath)
 	if err != nil {
 		return nil, err
@@ -312,7 +311,7 @@ func Compile(jsonPath string) (*Compiled, error) {
 		return nil, fmt.Errorf("$ or @ should in front of path")
 	}
 	tokens = tokens[1:]
-	res := Compiled{
+	res := compiled{
 		path:  jsonPath,
 		steps: make([]step, len(tokens)),
 	}
@@ -326,14 +325,14 @@ func Compile(jsonPath string) (*Compiled, error) {
 	return &res, nil
 }
 
-type Compiled struct {
+type compiled struct {
 	path   string
 	steps  []step
 	result map[string]interface{}
 	root   interface{}
 }
 
-func (c *Compiled) init(obj interface{}) {
+func (c *compiled) init(obj interface{}) {
 	c.result = make(map[string]interface{})
 	if len(c.steps) > 0 {
 		c.result["$"] = obj
@@ -341,11 +340,11 @@ func (c *Compiled) init(obj interface{}) {
 	}
 }
 
-func (c *Compiled) String() string {
-	return fmt.Sprintf("Compiled lookup: %s", c.path)
+func (c *compiled) String() string {
+	return fmt.Sprintf("compiled lookup: %s", c.path)
 }
 
-func (c *Compiled) Lookup(obj interface{}) (map[string]interface{}, error) {
+func (c *compiled) Lookup(obj interface{}) (map[string]interface{}, error) {
 	var err error
 	c.init(obj)
 	for _, s := range c.steps {
@@ -389,7 +388,7 @@ func (c *Compiled) Lookup(obj interface{}) (map[string]interface{}, error) {
 	return c.result, nil
 }
 
-func (c *Compiled) scans() error {
+func (c *compiled) scans() error {
 	res := make(map[string]interface{})
 	for k, v := range c.result {
 		obj, err := c.scan(v)
@@ -411,7 +410,7 @@ func (c *Compiled) scans() error {
 	return nil
 }
 
-func (c *Compiled) scan(obj interface{}) (map[objType]interface{}, error) {
+func (c *compiled) scan(obj interface{}) (map[objType]interface{}, error) {
 	if obj == nil {
 		return nil, nil
 	}
@@ -442,7 +441,7 @@ func (c *Compiled) scan(obj interface{}) (map[objType]interface{}, error) {
 	return res, nil
 }
 
-func (c *Compiled) scanFilter(s step) error {
+func (c *compiled) scanFilter(s step) error {
 	res := make(map[string]interface{})
 	if err := c.scans(); err != nil {
 		return err
@@ -468,7 +467,7 @@ func (c *Compiled) scanFilter(s step) error {
 	return nil
 }
 
-func (c *Compiled) filter(s step) error {
+func (c *compiled) filter(s step) error {
 	res := make(map[string]interface{})
 	if err := c.getKeys(s); err != nil {
 		return err
@@ -494,7 +493,7 @@ func (c *Compiled) filter(s step) error {
 	return nil
 }
 
-func (c *Compiled) getRanges(s step) error {
+func (c *compiled) getRanges(s step) error {
 	var err error
 	res := make(map[string]interface{})
 	if len(s.key) > 0 {
@@ -526,7 +525,7 @@ func (c *Compiled) getRanges(s step) error {
 	return nil
 }
 
-func (c *Compiled) getKeys(s step) error {
+func (c *compiled) getKeys(s step) error {
 	res := make(map[string]interface{})
 	for k, obj := range c.result {
 		val, err := c.getKey(obj, s.key)
@@ -542,7 +541,7 @@ func (c *Compiled) getKeys(s step) error {
 	return nil
 }
 
-func (c *Compiled) getIdxes(s step) error {
+func (c *compiled) getIdxes(s step) error {
 	var (
 		err error
 	)
@@ -570,7 +569,7 @@ func (c *Compiled) getIdxes(s step) error {
 	return nil
 }
 
-func (c *Compiled) getKey(obj interface{}, key string) (interface{}, error) {
+func (c *compiled) getKey(obj interface{}, key string) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
 		return nil, nil
 	}
@@ -604,7 +603,7 @@ func (c *Compiled) getKey(obj interface{}, key string) (interface{}, error) {
 	}
 }
 
-func (c *Compiled) getIdx(obj interface{}, idx int) (interface{}, error) {
+func (c *compiled) getIdx(obj interface{}, idx int) (interface{}, error) {
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Slice:
 		length := reflect.ValueOf(obj).Len()
@@ -626,7 +625,7 @@ func (c *Compiled) getIdx(obj interface{}, idx int) (interface{}, error) {
 	}
 }
 
-func (c *Compiled) getRange(obj, frm, to interface{}) (map[objType]interface{}, error) {
+func (c *compiled) getRange(obj, frm, to interface{}) (map[objType]interface{}, error) {
 	res := make(map[objType]interface{})
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Slice:
@@ -690,7 +689,7 @@ func (c *Compiled) getRange(obj, frm, to interface{}) (map[objType]interface{}, 
 	}
 }
 
-func (c *Compiled) getFiltered(obj interface{}, filter string) (map[objType]interface{}, error) {
+func (c *compiled) getFiltered(obj interface{}, filter string) (map[objType]interface{}, error) {
 	if obj == nil {
 		return nil, nil
 	}

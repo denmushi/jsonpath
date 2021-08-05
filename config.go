@@ -14,20 +14,20 @@ type RenameConfig struct {
 	To   string `json:"to"`
 }
 
-type RenameConfigParse struct {
+type renameConfigParse struct {
 	Len       int      `json:"len"` // FromParse和ToParse包括$,Len是扣掉$之后的长度
 	FromParse []string `json:"from_parse"`
 	ToParse   []string `json:"to_parse"`
 }
 
-func (r RenameConfigParse) GetFromByIndex(index int) (string, error) {
+func (r renameConfigParse) getFromByIndex(index int) (string, error) {
 	if index >= r.Len {
 		return "", errors.New("out of index")
 	}
 	return r.FromParse[index+1], nil
 }
 
-func (r RenameConfigParse) GetToByIndex(index int) (string, error) {
+func (r renameConfigParse) getToByIndex(index int) (string, error) {
 	if index >= r.Len {
 		return "", errors.New("out of index")
 	}
@@ -36,7 +36,7 @@ func (r RenameConfigParse) GetToByIndex(index int) (string, error) {
 
 // RenameConfigParse保存的数组第一个是带$的
 // 所以index是0的时候，表示要构造的是FromParse[0]+FromParse[1]
-func (r RenameConfigParse) BuildPath(index int) (string, string, bool) {
+func (r renameConfigParse) buildPath(index int) (string, string, bool) {
 	if index >= r.Len {
 		return "", "", false
 	}
@@ -45,7 +45,7 @@ func (r RenameConfigParse) BuildPath(index int) (string, string, bool) {
 	return from, to, true
 }
 
-func (r RenameConfigParse) RenameFrom(index int) error {
+func (r renameConfigParse) renameFrom(index int) error {
 	if index >= r.Len {
 		return errors.New("out of index")
 	}
@@ -53,11 +53,11 @@ func (r RenameConfigParse) RenameFrom(index int) error {
 	return nil
 }
 
-func (r RenamesConfig) ParseConfig() ([]RenameConfigParse, int) {
-	result := make([]RenameConfigParse, 0, len(r.Config))
+func (r RenamesConfig) parseConfig() ([]renameConfigParse, int) {
+	result := make([]renameConfigParse, 0, len(r.Config))
 	maxLen := -1
 	for _, each := range r.Config {
-		parse := RenameConfigParse{}
+		parse := renameConfigParse{}
 		parse.FromParse = strings.Split(each.From, ".")
 		parse.ToParse = strings.Split(each.To, ".")
 		parse.Len = len(parse.FromParse) - 1
