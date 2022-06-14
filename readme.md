@@ -120,3 +120,29 @@ config := jsonpath.RenamesConfig{
 }
 _ = jsonpath.Rename(json_data, config)
 ```
+
+支持提取json模版 "${}"表示模版
+```go
+import (
+"github.com/denmushi/jsonpath"
+)
+
+jsonStr := `{
+    "url":"${url_}",
+    "user":{
+		"name": "${name_}",
+		"age": 12
+	},
+    "extra": [
+		{
+			"e1": "${e1_}",
+			"e2": "${e1_}"
+		},
+		{
+			"e3": "${e3_}11",
+			"e4": "1${e24_}"
+		}
+	]
+ }`
+res, _ := jsonpath.ParseJsonTemplate(jsonStr)
+```

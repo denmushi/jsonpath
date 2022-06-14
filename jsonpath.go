@@ -27,6 +27,7 @@ var (
 	errNotSupported   = errors.New("not supported")
 	reg1              = regexp.MustCompile(`\[([0-9]+|\*)]`)
 	reg2              = regexp.MustCompile(`[0-9]+]`)
+	reg3              = regexp.MustCompile("^\\${(.+)}$")
 )
 
 func Lookup(obj interface{}, jsonPath string) (map[string]interface{}, error) {
@@ -37,7 +38,7 @@ func Lookup(obj interface{}, jsonPath string) (map[string]interface{}, error) {
 	return c.Lookup(obj)
 }
 
-// 给定一个JsonPath语法的固定路径，进行body更新.
+// SetToBody 给定一个JsonPath语法的固定路径，进行body更新.
 func SetToBody(body interface{}, keyFullPath string, value interface{}) error {
 	rawParts := strings.Split(keyFullPath, ".")
 	if len(rawParts) <= 1 || rawParts[0] != "$" {
@@ -61,7 +62,7 @@ func SetToBody(body interface{}, keyFullPath string, value interface{}) error {
 	return nil
 }
 
-// 给定一个JsonPath语法的通配路径，进行body删除
+// DeleteByKey 给定一个JsonPath语法的通配路径，进行body删除
 func DeleteByKey(body interface{}, key string) error {
 	keyMap, err := Lookup(body, key)
 	if err != nil {
@@ -74,7 +75,7 @@ func DeleteByKey(body interface{}, key string) error {
 	return DeleteBody(body, toDelete)
 }
 
-// 给定一组JsonPath语法的固定路径，进行body删除
+// DeleteBody 给定一组JsonPath语法的固定路径，进行body删除
 func DeleteBody(body interface{}, keyFullPaths []string) error {
 	for _, keyFullPath := range keyFullPaths {
 		if err := markBody(keyFullPath, body); err != nil {
@@ -85,12 +86,53 @@ func DeleteBody(body interface{}, keyFullPaths []string) error {
 	return nil
 }
 
-// 给定一个json_path重命名的配置，修改body的key
+// Rename 给定一个json_path重命名的配置，修改body的key
 func Rename(body interface{}, renames RenamesConfig) error {
 	configs, maxLen := renames.parseConfig()
 	for i := 0; i < maxLen; i++ {
 		if err := renameIndex(configs, i, body); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// ParseJsonTemplate 给定一个json string, 返回所有值为 "${xx}" 的路径以及 xx 的名字. 例如返回为 key=xx, value={"$.value1", "$.value2"}
+func ParseJsonTemplate(jsonStr string) (map[string][]string, error) {
+	var jsonBody map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &jsonBody); err != nil {
+		return nil, err
+	}
+	res := make(map[string][]string)
+	resMap, err := Lookup(jsonBody, "$.*")
+	if err != nil {
+		return nil, err
+	}
+	if err := parseTemplate(jsonBody, resMap, res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func parseTemplate(jsonBody, pathMap map[string]interface{}, res map[string][]string) error {
+	for path, value := range pathMap {
+		switch v := value.(type) {
+		case string:
+			// 判断是否符合正则
+			params := reg3.FindStringSubmatch(v)
+			if len(params) > 0 {
+				res[params[len(params)-1]] = append(res[params[len(params)-1]], path)
+			}
+		case []interface{}, map[string]interface{}:
+			nextPathMap, err := Lookup(jsonBody, path+".*")
+			if err != nil {
+				return err
+			}
+			if err := parseTemplate(jsonBody, nextPathMap, res); err != nil {
+				return err
+			}
+		default:
+			// 非数组、map、string不用处理
 		}
 	}
 	return nil

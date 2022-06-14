@@ -1403,3 +1403,30 @@ func TestRename(t *testing.T) {
 		assert.Equal(t, afterRenameJson, renameJson)
 	})
 }
+
+func TestParseJsonTemplate(t *testing.T) {
+	jsonStr := `{
+    "url":"${url_}",
+    "user":{
+		"name": "${name_}",
+		"age": 12
+	},
+    "extra": [
+		{
+			"e1": "${e1_}",
+			"e2": "${e1_}"
+		},
+		{
+			"e3": "${e3_}11",
+			"e4": "1${e24_}"
+		}
+	]
+ }`
+	res, err := ParseJsonTemplate(jsonStr)
+	assert.Nil(t, err)
+	assert.Equal(t, map[string][]string{
+		"url_":  {"$.url"},
+		"name_": {"$.user.name"},
+		"e1_":   {"$.extra[0].e1", "$.extra[0].e2"},
+	}, res)
+}
